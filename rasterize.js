@@ -4,8 +4,8 @@
 const WIN_Z = 0;  // default graphics window z coord in world space
 const WIN_LEFT = 0; const WIN_RIGHT = 1;  // default left and right x coords in world space
 const WIN_BOTTOM = 0; const WIN_TOP = 1;  // default top and bottom y coords in world space
-const INPUT_TRIANGLES_URL = "https://pages.github.ncsu.edu/cgclass/exercise5/triangles.json"; // triangles file loc
-const INPUT_ELLIPSOIDS_URL = "https://pages.github.ncsu.edu/cgclass/exercise5/ellipsoids.json"; // ellipsoids file loc
+const INPUT_TRIANGLES_URL = "https://raw.githubusercontent.com/NCSUCGClassPrivate/exercise5/async/triangles.json"; // triangles file loc
+const INPUT_ELLIPSOIDS_URL = "https://raw.githubusercontent.com/NCSUCGClassPrivate/exercise5/async/ellipsoids.json"; // ellipsoids file loc
 var Eye = new vec4.fromValues(0.5,0.5,-0.5,1.0); // default eye position in world space
 
 /* webgl globals */
@@ -18,32 +18,64 @@ var vertexPositionAttrib; // where to put position for vertex shader
 
 // ASSIGNMENT HELPER FUNCTIONS
 
-// get the JSON file from the passed URL
 function getJSONFile(url,descr) {
-    try {
-        if ((typeof(url) !== "string") || (typeof(descr) !== "string"))
-            throw "getJSONFile: parameter not a string";
-        else {
-            var httpReq = new XMLHttpRequest(); // a new http request
-            httpReq.open("GET",url,false); // init the request
-            httpReq.send(null); // send the request
-            var startTime = Date.now();
-            while ((httpReq.status !== 200) && (httpReq.readyState !== XMLHttpRequest.DONE)) {
-                if ((Date.now()-startTime) > 3000)
-                    break;
-            } // until its loaded or we time out after three seconds
-            if ((httpReq.status !== 200) || (httpReq.readyState !== XMLHttpRequest.DONE))
-                throw "Unable to open "+descr+" file!";
-            else
-                return JSON.parse(httpReq.response); 
-        } // end if good params
-    } // end try    
     
-    catch(e) {
-        console.log(e);
-        return(String.null);
-    }
-} // end get input json file
+    var returnValue = String.null; // the default return value
+
+    if ((typeof(url) !== "string") || (typeof(descr) !== "string"))
+        console.error("getJSONFile: parameter not a string");
+    else { // else we have good params
+        
+        var loadDone = false; // whether the load attempt is done
+        
+        // when get fails
+        function getFailed(evt) {
+            loadDone = true; 
+            console.error(descr + " failed to load.");
+        } // end when get fails
+
+        // when get aborted
+        function getAborted(evt) { 
+            loadDone = true; 
+            console.error(descr + " was aborted by user.");
+        } // end when get aborted
+
+        // when get times out
+        function getTimedOut(evt) {
+            loadDone = true; 
+            console.error(descr + " took too long to load.");
+        } // end when get times out
+
+        // when get loads
+        function getLoaded(evt) {
+            loadDone = true; 
+            console.log(descr + " loaded.");
+            returnValue = JSON.parse(httpReq.responseText);
+        } // end when get times out
+
+        // set up http request object
+        var httpReq = new XMLHttpRequest(); // a new http request
+        // httpReq.timeout = 2000; // wait 2 secs for async result then timeout
+        httpReq.addEventListener("error", getFailed);
+        httpReq.addEventListener("abort", getAborted);
+        httpReq.addEventListener("timeout", getTimedOut);
+        httpReq.addEventListener("load", getLoaded);
+
+        // issue async get request
+        httpReq.open("GET",url,false); // init the request asynchronously
+        httpReq.send(null); // send the request
+        
+        // wait for http request to complete
+        var numChecks = 0;
+        while (!loadDone && (numChecks < 25)) {
+            console.log("loadDone: "+loadDone+", numChecks: "+numChecks);
+            window.setTimeout(function(){},100);
+            numChecks++;
+        } // end while
+    } // end if good params
+    
+    return(returnValue);
+} // end get json file
 
 // set up the webGL environment
 function setupWebGL() {
@@ -121,7 +153,7 @@ function setupShaders() {
     // define fragment shader in essl using es6 template strings
     var fShaderCode = `
         void main(void) {
-            gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // all fragments are white
+            gl_FragColor = vec4(0.2, 0.7, 1.0, 1.0); // all fragments are white
         }
     `;
     
@@ -130,7 +162,9 @@ function setupShaders() {
         attribute vec3 vertexPosition;
 
         void main(void) {
-            gl_Position = vec4(vertexPosition, 1.0); // use the untransformed position
+            vec3 newPosition = vertexPosition;
+            newPosition.xy *= 0.4;
+            gl_Position = vec4(newPosition, 1.0); // use the untransformed position
         }
     `;
     
